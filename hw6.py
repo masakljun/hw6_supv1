@@ -60,30 +60,81 @@ class ANN:
         pass
         # fmin_lbfgs(feedforward, wb, backprop, ...)
 
-    def feedforward(self, weights):
+    def feedforward(self, weights, info = False):
         weights, bias = from1D(weights, self.layer_lengths)
-        print(f"W: {weights}")
-        print(f"b: {bias}")
+        #print(f"W: {weights}")
+        #print(f"b: {bias}")
+
+        activations = []
+        zs = []
 
         act = self.X.T
+        activations.append(act)
+
         for i in range(0, len(weights)-1):
             z = np.dot(weights[i], act) + bias[i]
             act = sigmoid(z)
+            activations.append(act)
+            zs.append(z)
 
         z = np.dot(weights[-1], act) + bias[-1]
+        zs.append(z)
 
         if self.type == "reg":
             act = z
         else: # type = "clas"
             act = softmax(z.T)
+            # in the same shape as previous
+            act = act.T
 
-        # in the same shape as previous
-        act = act.T
+        activations.append(act)
 
-        # each X line own line
-        return act.T
+        if type == "reg":
+            loss = mse(y, act)
+        else: # type = "clas"
+            loss = cross_entropy(y, act)
 
-    #def backpropagation(self, weights, ):
+        if info:
+            return zs, activations, loss
+        else:
+            return loss
+
+
+    def backpropagation(self, weights):
+        zs, activations, loss = self.feedforward(weights, True)
+        w, b = from1D(weights, self.layer_lengths)
+
+        wgs = [None] * len(w)    # weight gradients
+        bgs = [None] * len(w)
+        ds = [None] * len(w)    # deltas
+
+        # first step
+        if self.type == "reg":
+            ds[-1] = 2 * (activations[-1] - y.flatten())/len(y.flatten())
+        else:
+            ds[-1] = activations[-1]
+            ds[-1][y.flatten(), range(len(y.flatten()))] -= 1
+            ds[-1] = ds[-1] / len(y.flatten())
+        wgs[-1] = ds[-1].dot(activations[-2].T)
+        bgs[-1] = np.sum(ds[-1], axis = 1)
+
+        # other steps
+        lvl = len(w)-2
+
+        while lvl >= 0:
+            print(lvl)
+            sigmoid_der = activations[lvl+1] * (1. - activations[lvl+1])
+            print(f"ds+1: {w[lvl].shape}")
+            ds[lvl] = sigmoid_der * ds[lvl+1].T.dot(w[lvl+1]).T
+            wgs[lvl] = ds[lvl].dot(activations[lvl].T)
+            bgs[lvl] = np.sum(ds[lvl], axis = 1)
+            lvl = lvl - 1
+
+        print(ds)
+        print(wgs)
+        print(bgs)
+
+        #for i in range(2, len(self.units)-1):
 
 
 def read_csv(fn):
@@ -105,10 +156,19 @@ def softmax(x):
     res = np.exp(x) / (np.sum(np.exp(x), axis=1, keepdims= True))
     return res
 
-# Mean squared error
+# Mean squared error for regression
 def mse(true, pred):
     res = np.square(np.subtract(true, pred)).mean()
     return res
+
+# Cross entropy for classification
+def cross_entropy(true, pred):
+    el = np.choose(true, pred)
+    log_like = -np.log(el)
+    loss = np.sum(log_like)/len(true)
+    return loss
+
+
 
 # Put everything (biases, weights) in 1D vector
 def to1D(weights, biases):
@@ -150,20 +210,25 @@ if __name__ == "__main__":
        [1, 1, 1],
        [1, 0, 1],
        [0, 1, 1]])
-
     y = np.array([0, 1, 1, 0])
-    weights = np.array([[ 0.93405968,  0.0944645 ],
-       [ 0.94536872,  0.42963199],
-       [ 0.39545765, -0.56782101],
-       [ 0.95254891, -0.98753949]])
 
-    weights = weights.T
-    biases = [weights[:, -1]]
-    weights = [weights[:, :-1]]
+
+    #weights = np.array([[ 0.93405968,  0.0944645 ],
+    #   [ 0.94536872,  0.42963199],
+    #   [ 0.39545765, -0.56782101],
+    #   [ 0.95254891, -0.98753949]])
+
+    #weights = weights.T
+    #biases = [weights[:, -1]]
+    #weights = [weights[:, :-1]]
+    np.random.seed(1)
+    weights = [np.random.rand(2,4), np.random.rand(2,3)]
+    biases = [w[:, -1] for w in weights]
+    weights = [w[:, :-1] for w in weights]
+
+    print(biases)
 
     w = to1D(weights, biases)
 
-    print(w)
-
-    test = ANN("clas", units = [], X = X, y = y)
-    print(test.feedforward(w))
+    test = ANN("clas", units = [2], X = X, y = y)
+    print(test.backpropagation(w))
