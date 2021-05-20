@@ -208,12 +208,20 @@ class ANN:
         return w
 
 
-def read_csv(fn):
+def read_csv_reg(fn):
     content = list(csv.reader(open(fn, "rt")))
     legend = content[0][:-1]
     data = content[1:]
     X = np.array([d[:-1] for d in data], dtype=np.float)
     y = np.array([d[-1] for d in data], dtype=np.float)
+    return legend, X, y
+
+def read_csv_clas(fn):
+    content = list(csv.reader(open(fn, "rt")))
+    legend = content[0][:-1]
+    data = content[1:]
+    X = np.array([d[:-1] for d in data], dtype=np.float)
+    y = np.array([d[-1] for d in data], dtype=np.str)
     return legend, X, y
 
 
@@ -270,12 +278,21 @@ def from1D(wb, layers):
     return weights, biases
 
 
-def housing(X, y, type):
-    #if type == "reg":
+def housing2r(fn):
+    legend, X, y = read_csv_reg(fn)
+    X = StandardScaler().fit_transform(X)
+    model = ANNRegression([20,5], 0.0001)
+    fitted = model.fit(X, y)
+    #print(f"TEST: {mse(y, fitted.predict(X))}")
 
-    pass
-    #else:
+def housing3(fn):
+    legend, X, y = read_csv_clas(fn)
+    X = StandardScaler().fit_transform(X)
+    y = np.unique(y, return_inverse = True)[1]
 
+    model = ANNClassification([10,5,3], 0.0001)
+    fitted = model.fit(X, y)
+    print(f"TEST: {cross_entropy(y, fitted.predict(X).T)}")
 
 if __name__ == "__main__":
     pass
@@ -315,4 +332,6 @@ if __name__ == "__main__":
     #test = ANN("reg", units = [], X = X, y = y, lambda_= 0.0)
     #print(test.backpropagation(w))
     #print(test.verify_gradient(w, 1e-5, 1e-3))
+    #housing2r("housing2r.csv")
+    housing3("housing3.csv")
 
