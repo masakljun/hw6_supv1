@@ -1,9 +1,11 @@
 import numpy as np
 import csv
+import time
 from sklearn.preprocessing import StandardScaler
 from scipy.optimize import fmin_l_bfgs_b
 from sklearn.model_selection import train_test_split
 from sklearn.model_selection import KFold
+import pandas as pd
 import sys
 sys.path.append("../HW2")
 sys.path.append("../HW4")
@@ -372,47 +374,95 @@ def grid_search(lambda_candidates, units_candidates, X_train, y_train, t):
                 best_units = u
     return best_lambda, best_units
 
+def read_final_data():
+    # read train data
+    df = pd.read_csv('train.csv.gz', sep=',', index_col="id")
+    df = df.to_numpy()
+
+    X = df[:, :-1]
+    y = df[:, -1]
+
+    # convert to integers
+    y = np.array(to_int(y))
+
+    # shuffle
+    np.random.seed(0)
+    idx = list(range(len(y)))
+    np.random.shuffle(idx)
+
+    X = X[idx, :]
+    y = y[idx]
+    X = X.astype(np.float64)
+    y = y.astype(np.int)
+
+    # read test data
+    df1 = pd.read_csv('test.csv.gz', sep=',', index_col="id")
+    X_test = df1.to_numpy()
+
+    X = StandardScaler().fit_transform(X)
+    X_test = StandardScaler().fit_transform(X_test)
+
+    return X, y, X_test
+
+def create_final_predictions():
+    X, y, X_test = read_final_data()
+
+
+    # grid search
+    lambda_candidates = [0.001, 0.01, 0.1, 1]
+    units_candidates = [[], [5, 18], [5,10,18], [10,10,10]]
+
+    start_time = time.time()
+    best_lambda, best_units = grid_search(lambda_candidates, units_candidates, X, y, t="clas")
+    end_time_cv = time.time() - start_time
+
+    # fit the model
+    start_time = time.time()
+    model = ANNClassification(best_units, best_lambda)
+    fitted_model = model.fit(X, y)
+    end_time_fit = time.time() - start_time
+
+
+    # create final predictions
+    start_time = time.time()
+    final_predictions = fitted_model.predict(X_test)
+    end_time_pred = time.time() - start_time
+
+    df_result = pd.DataFrame(final_predictions, columns= ['Class_1', 'Class_2', 'Class_3', 'Class_4','Class_5', 'Class_6', 'Class_7', 'Class_8', 'Class_9'])
+    df_result.index += 1
+    df_result.to_csv("final.txt", index_label= "id", sep=",")
+
+    print(f"Best lambda: {best_lambda}")
+    print(f"Best units: {best_units}")
+    print(f"CV time: {end_time_cv}")
+    print(f"Fit time:  {end_time_fit}")
+    print(f"Predict time: {end_time_pred}")
+
+
+def to_int(y):
+    dictio = {'Class_1': 0, 'Class_2': 1, 'Class_3': 2, 'Class_4': 3, 'Class_5': 4, 'Class_6': 5, 'Class_7': 6, 'Class_8': 7, 'Class_9': 8}
+    num_y = [dictio[i] for i in y]
+    return num_y
+
 
 if __name__ == "__main__":
-    pass
-    #legend, X, y = read_csv("housing2r.csv")
-    #X = StandardScaler().fit_transform(X)
-
-    #test = ANN("reg", units = [3], X = X, y = y)
-    #print(test.feedforward(X[0:10, :]))
-
-    #X = np.array([[0, 0, 1],
-      # [1, 1, 1],
-      # [1, 0, 1],
-      # [0, 1, 1]])
-    #y = np.array([0, 1, 1, 0])
-
-
-    #weights = np.array([[ 0.93405968,  0.0944645 ],
-     #  [ 0.94536872,  0.42963199],
-      # [ 0.39545765, -0.56782101],
-       #[ 0.95254891, -0.98753949]])
-
-    #np.random.seed(1)
-    #weights = np.random.rand(4,1)
-
-    #weights = weights.T
-    #biases = [weights[:, -1]]
-    #weights = [weights[:, :-1]]
-    #np.random.seed(1)
-    #weights = [np.random.rand(2,4), np.random.rand(2,3)]
-    #biases = [w[:, -1] for w in weights]
-    #weights = [w[:, :-1] for w in weights]
-
-    #print(biases)
-
-    #w = to1D(weights, biases)
-
-    #test = ANN("reg", units = [], X = X, y = y, lambda_= 0.0)
-    #print(test.backpropagation(w))
-    #print(test.verify_gradient(w, 1e-5, 1e-3))
-
-
-    housing3("housing3.csv")
+    ### problem 3
+    #housing3("housing3.csv")
     #housing2r("housing2r.csv")
+
+    ### problem 4
+    create_final_predictions()
+    #X, y, _ = read_final_data()
+    #size = int(0.7 * X.shape[0])
+
+    #X_train = X[:size, :]
+    #y_train = y[:size]
+    #X_test = X[size:, :]
+    #y_test = y[size:]
+
+    #model = ANNClassification([5, 18],0.001)
+    #fitted = model.fit(X_train, y_train)
+    #res = cross_entropy(y_test, fitted.predict(X_test).T)
+    #print( f"[ANN] The cross entropy score is: {res}.")
+
 
