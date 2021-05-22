@@ -2,6 +2,13 @@ import numpy as np
 import csv
 from sklearn.preprocessing import StandardScaler
 from scipy.optimize import fmin_l_bfgs_b
+from sklearn.model_selection import train_test_split
+from sklearn.model_selection import KFold
+import sys
+sys.path.append("../HW2")
+sys.path.append("../HW4")
+from hw_svr import SVR, RBF
+from main import MultinomialLogReg
 
 class ANNRegression:
 
@@ -69,7 +76,7 @@ class ANN:
 
     def fit(self):
         wb = to1D(self.weights_, self.bias_)
-        if self.verify_gradient(wb, 1e-5, 1e-3):
+        if self.verify_gradient(wb, 1e-06, 1e-02):
             print("Verified: the gradient and cost are compatible")
         else:
             print("Warning: the gradient and cost are NOT compatible")
@@ -81,12 +88,15 @@ class ANN:
         self.bias_ = b
 
     def feedforward(self, weights, info = False, X_new = None):
-        # regularize weights
-        add = self.lambda_ / np.sum(2 * (np.array(weights) ** 2))
         #print(add)
         weights, bias = from1D(weights, self.layer_lengths)
         #print(f"W: {weights}")
         #print(f"b: {bias}")
+
+        # regularize weights
+        bias0 = [np.zeros(b.shape) for b in bias]
+        weights_reg = to1D(weights, bias0)
+        add = (self.lambda_ / 2) * np.sum((np.array(weights_reg) ** 2))
 
         activations = []
         zs = []
@@ -116,11 +126,14 @@ class ANN:
 
         activations.append(act)
 
-        if self.type == "reg":
-            loss = mse(self.y, act)
-        else: # type = "clas"
-            loss = cross_entropy(self.y, act)
-
+        if X_new is None:
+            if self.type == "reg":
+                loss = mse(self.y, act)
+            else: # type = "clas"
+                loss = cross_entropy(self.y, act)
+        else:
+            # do not compute loss for predictions
+            loss, add = 0, 0
 
         if info:
             return zs, activations, loss+add
@@ -280,19 +293,85 @@ def from1D(wb, layers):
 
 def housing2r(fn):
     legend, X, y = read_csv_reg(fn)
-    X = StandardScaler().fit_transform(X)
-    model = ANNRegression([20,5], 0.0001)
-    fitted = model.fit(X, y)
-    #print(f"TEST: {mse(y, fitted.predict(X))}")
+
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=0, shuffle=True)
+
+    X_train = StandardScaler().fit_transform(X_train)
+    X_test = StandardScaler().fit_transform(X_test)
+
+    # grid search
+    lambda_candidates = [0.00001, 0.0001, 0.001, 0.01, 0.1, 1]
+    units_candidates = [[], [10], [5, 10], [10, 10], [10, 20], [20, 20]]
+
+    best_lambda, best_units = grid_search(lambda_candidates, units_candidates, X_train, y_train, t="reg")
+    best_model = ANNRegression(best_units, best_lambda)
+    fitted = best_model.fit(X_train, y_train)
+    best_res = mse(y_test, fitted.predict(X_test).T)
+    print(f"[ANN] The best MSE is: {best_res}. It was obtained with units: {best_units} and lambda: {best_lambda}")
+
+    fitter = SVR(kernel=RBF(sigma=5), lambda_=1, epsilon=1)
+    model = fitter.fit(X_train, y_train)
+    pred = model.predict(X_test)
+    svr_res = mse(y_test, pred)
+    print(f"[SVR w/ RBF] The MSE is: {svr_res}")
+
 
 def housing3(fn):
     legend, X, y = read_csv_clas(fn)
-    X = StandardScaler().fit_transform(X)
     y = np.unique(y, return_inverse = True)[1]
 
-    model = ANNClassification([10,5,3], 0.0001)
-    fitted = model.fit(X, y)
-    print(f"TEST: {cross_entropy(y, fitted.predict(X).T)}")
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size = 0.2, random_state = 0, shuffle= True)
+
+    X_train = StandardScaler().fit_transform(X_train)
+    X_test = StandardScaler().fit_transform(X_test)
+
+
+    # grid search
+    lambda_candidates = [0.00001, 0.0001, 0.001, 0.01, 0.1, 1]
+    units_candidates = [[], [5], [10], [8, 8], [5, 10], [10, 15], [20, 20]]
+
+    best_lambda, best_units = grid_search(lambda_candidates, units_candidates, X_train, y_train, t = "clas")
+    best_model = ANNClassification(best_units, best_lambda)
+    fitted = best_model.fit(X_train, y_train)
+    best_res = cross_entropy(y_test, fitted.predict(X_test).T)
+    print(f"[ANN] The best cross entropy score is: {best_res}. It was obtained with units: {best_units} and lambda: {best_lambda}")
+
+    fitter = MultinomialLogReg()
+    model = fitter.build(X_train, y_train)
+    pred = model.predict1(X_test)
+    mlr_res = cross_entropy(y_test, pred.T)
+    print(f"[Multinomial log.reg.] The cross entropy is: {mlr_res}")
+
+
+def grid_search(lambda_candidates, units_candidates, X_train, y_train, t):
+    best_res = np.inf
+    best_lambda = 0
+    best_units = 0
+    for l in lambda_candidates:
+        for u in units_candidates:
+            print(f"units {u}, lambda {l}")
+            res_cv = []
+            kf = KFold(n_splits=5, random_state=None, shuffle=False)
+            for train_index, test_index in kf.split(X_train):
+                X_train_k, X_test_k = X_train[train_index, :], X_train[test_index, :]
+                y_train_k, y_test_k = y_train[train_index], y_train[test_index]
+                if t == "clas":
+                    model = ANNClassification(u, l)
+                    fitted = model.fit(X_train_k, y_train_k)
+                    res_cv.append(cross_entropy(y_test_k, fitted.predict(X_test_k).T))
+
+                else: #t = reg
+                    model = ANNRegression(u, l)
+                    fitted = model.fit(X_train_k, y_train_k)
+                    res_cv.append(mse(y_test_k, fitted.predict(X_test_k)))
+
+            # check if the current setting of parameters is better then the best so far
+            if np.average(res_cv) < best_res:
+                best_res = np.average(res_cv)
+                best_lambda = l
+                best_units = u
+    return best_lambda, best_units
+
 
 if __name__ == "__main__":
     pass
@@ -332,6 +411,8 @@ if __name__ == "__main__":
     #test = ANN("reg", units = [], X = X, y = y, lambda_= 0.0)
     #print(test.backpropagation(w))
     #print(test.verify_gradient(w, 1e-5, 1e-3))
-    #housing2r("housing2r.csv")
+
+
     housing3("housing3.csv")
+    #housing2r("housing2r.csv")
 
