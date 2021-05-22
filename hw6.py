@@ -305,7 +305,7 @@ def housing2r(fn):
     lambda_candidates = [0.00001, 0.0001, 0.001, 0.01, 0.1, 1]
     units_candidates = [[], [10], [5, 10], [10, 10], [10, 20], [20, 20]]
 
-    best_lambda, best_units = grid_search(lambda_candidates, units_candidates, X_train, y_train, t="reg")
+    best_lambda, best_units, _ = grid_search(lambda_candidates, units_candidates, X_train, y_train, t="reg")
     best_model = ANNRegression(best_units, best_lambda)
     fitted = best_model.fit(X_train, y_train)
     best_res = mse(y_test, fitted.predict(X_test).T)
@@ -332,7 +332,7 @@ def housing3(fn):
     lambda_candidates = [0.00001, 0.0001, 0.001, 0.01, 0.1, 1]
     units_candidates = [[], [5], [10], [8, 8], [5, 10], [10, 15], [20, 20]]
 
-    best_lambda, best_units = grid_search(lambda_candidates, units_candidates, X_train, y_train, t = "clas")
+    best_lambda, best_units, _ = grid_search(lambda_candidates, units_candidates, X_train, y_train, t = "clas")
     best_model = ANNClassification(best_units, best_lambda)
     fitted = best_model.fit(X_train, y_train)
     best_res = cross_entropy(y_test, fitted.predict(X_test).T)
@@ -372,7 +372,7 @@ def grid_search(lambda_candidates, units_candidates, X_train, y_train, t):
                 best_res = np.average(res_cv)
                 best_lambda = l
                 best_units = u
-    return best_lambda, best_units
+    return best_lambda, best_units, best_res
 
 def read_final_data():
     # read train data
@@ -409,11 +409,11 @@ def create_final_predictions():
 
 
     # grid search
-    lambda_candidates = [0.001, 0.01, 0.1, 1]
+    lambda_candidates = [0.0001, 0.001, 0.01, 0.1]
     units_candidates = [[], [5, 18], [5,10,18], [10,10,10]]
 
     start_time = time.time()
-    best_lambda, best_units = grid_search(lambda_candidates, units_candidates, X, y, t="clas")
+    best_lambda, best_units, best_res = grid_search(lambda_candidates, units_candidates, X, y, t="clas")
     end_time_cv = time.time() - start_time
 
     # fit the model
@@ -434,9 +434,15 @@ def create_final_predictions():
 
     print(f"Best lambda: {best_lambda}")
     print(f"Best units: {best_units}")
+    print(f"Best res: {best_res}")
     print(f"CV time: {end_time_cv}")
     print(f"Fit time:  {end_time_fit}")
     print(f"Predict time: {end_time_pred}")
+
+    # predict on train
+    train_predictions = fitted_model.predict(X)
+    train_res = cross_entropy(y, train_predictions.T)
+    print(f"Train prediction: {train_res}")
 
 
 def to_int(y):
