@@ -255,12 +255,26 @@ def mse(true, pred):
     res = np.square(np.subtract(true, pred)).mean()
     return res
 
+# MSE for stating uncertainty
+def mse_uncertainty(true, pred):
+    res = np.square(np.subtract(true, pred)).mean()
+    se = np.std(np.square(np.subtract(true, pred)))/len(true)
+    return se
+
 # Cross entropy for classification
 def cross_entropy(true, pred):
     el = np.choose(true, pred)
     log_like = -np.log(el)
     loss = np.sum(log_like)/len(true)
     return loss
+
+# Cross entropy for stating uncertainty
+def cross_entropy_uncertainty(true, pred):
+    el = np.choose(true, pred)
+    log_like = -np.log(el)
+    loss = np.sum(log_like)/len(true)
+    se = np.std(log_like)/(len(true))
+    return se
 
 
 # Put everything (biases, weights) in 1D vector
@@ -309,13 +323,17 @@ def housing2r(fn):
     best_model = ANNRegression(best_units, best_lambda)
     fitted = best_model.fit(X_train, y_train)
     best_res = mse(y_test, fitted.predict(X_test).T)
+    se = mse_uncertainty(y_test, fitted.predict(X_test).T)
     print(f"[ANN] The best MSE is: {best_res}. It was obtained with units: {best_units} and lambda: {best_lambda}")
+    print(f"[ANN] SE: {se}")
 
     fitter = SVR(kernel=RBF(sigma=5), lambda_=1, epsilon=1)
     model = fitter.fit(X_train, y_train)
     pred = model.predict(X_test)
     svr_res = mse(y_test, pred)
+    se1 = mse_uncertainty(y_test, pred)
     print(f"[SVR w/ RBF] The MSE is: {svr_res}")
+    print(f"[SVR w/ RBF] SE: {se1}")
 
 
 def housing3(fn):
@@ -336,13 +354,17 @@ def housing3(fn):
     best_model = ANNClassification(best_units, best_lambda)
     fitted = best_model.fit(X_train, y_train)
     best_res = cross_entropy(y_test, fitted.predict(X_test).T)
+    se = cross_entropy_uncertainty(y_test, fitted.predict(X_test).T)
     print(f"[ANN] The best cross entropy score is: {best_res}. It was obtained with units: {best_units} and lambda: {best_lambda}")
+    print(f"[ANN] SE: {se}")
 
     fitter = MultinomialLogReg()
     model = fitter.build(X_train, y_train)
     pred = model.predict1(X_test)
     mlr_res = cross_entropy(y_test, pred.T)
+    se1 = cross_entropy_uncertainty(y_test,  pred.T)
     print(f"[Multinomial log.reg.] The cross entropy is: {mlr_res}")
+    print(f"[Multinomial log.reg.] SE: {se1}")
 
 
 def grid_search(lambda_candidates, units_candidates, X_train, y_train, t):
@@ -453,13 +475,15 @@ def to_int(y):
 
 if __name__ == "__main__":
     ### problem 3
-    #housing3("housing3.csv")
-    #housing2r("housing2r.csv")
+    housing3("housing3.csv")
+    housing2r("housing2r.csv")
 
-    ### problem 4
+    ### problem 4 -- TAKES A LOT OF TIME TO EXECUTE, so please comment it (#) if you only want to try out problem 3 :)
     create_final_predictions()
+
+    # manually checking which parameters work for CV
     #X, y, _ = read_final_data()
-    #size = int(0.7 * X.shape[0])
+    #size = int(0.8 * X.shape[0])
 
     #X_train = X[:size, :]
     #y_train = y[:size]
